@@ -1,12 +1,22 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Binaries & APKs (Keep the lab, lose the bloat)
+*.apk
+*.dex
+*.so
+frida-server*
+
+# Tools (Better to download fresh than store in Git)
 tools/
-future-challenges/
-tools/
-future-challenges/
-uncrackable-level1-reversing/
-uncrackable-level3-reversing/
-insecure-bank-v2/
-tools/
-future-challenges/
-uncrackable-level1-reversing/
-uncrackable-level3-reversing/
-insecure-bank-v2/
+jadx_gui/
+*.jadx
+
+# Logs & Temporary files
+logs/
+*.log
+.DS_Store
+
+# Document backups
+~.docx

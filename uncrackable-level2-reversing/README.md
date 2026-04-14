@@ -1,56 +1,22 @@
-# Android Native & JNI Reverse Engineering (UnCrackable Level 2)
+# Mobile Security & Reverse Engineering Lab
 
-**Techniques Demonstrated:** Static/Dynamic Analysis, JNI (Java Native Interface) Analysis, Anti-Debugging Bypass, Dynamic Binary Instrumentation (DBI) via Frida.
+Welcome to my Mobile Security Research Laboratory. This repository contains write-ups, custom scripts, and research notes from my work analyzing Android applications, bypassing anti-analysis mechanisms, and performing Dynamic Binary Instrumentation (DBI).
 
-## 📝 Objective
-The goal of this challenge is to bypass root detection and anti-debugging mechanisms in an Android application to extract a hidden secret key. The core validation logic is implemented within a native C/C++ library (`libfoo.so`).
+## 🏗️ Lab Architecture & Tooling Strategy
+To maintain a clean and reproducible research environment, this lab utilizes a containerized architecture (ארכיטקטורה מבוססת קונטיינרים):
 
-## 🔍 Stage 1: Static Analysis & JNI Discovery
-Initial static analysis using JADX revealed that the critical verification function was defined with the `native` keyword. This indicated that the execution flow crosses the JNI boundary into a compiled native library.
+* **The Host OS & Emulator:** The Android Virtual Device (AVD) runs natively on the host operating system (Fedora), acting as an independent target environment.
+* **Isolated Toolchain (Distrobox):** All offensive security tools (Frida, ADB, JADX) are containerized within a Distrobox environment. This keeps the host system clean and prevents dependency conflicts (התנגשויות תלויות).
+* **The Bridge (ADB):** Android Debug Bridge acts as a virtual network cable, crossing the container's boundary to connect the isolated tools with the host-level emulator.
+* **Dynamic Instrumentation (Frida):** Android applications run on **ART** (Android Runtime). Frida embeds a miniature **V8** engine to parse JavaScript hook scripts, translating them Just-In-Time (JIT) into CPU-level Assembly instructions. These instructions are injected directly into the application's native memory space, allowing runtime hooking of core OS libraries (like `libc.so`).
 
-1. I extracted the APK and located the `libfoo.so` native library.
-2. Loading the library into IDA Pro and examining the **Exports** table, I identified the JNI signature to find the exported function: `Java_sg_vantagepoint_uncrackable2_CodeCheck_bar`.
+## 🚀 Research Projects & Challenges
 
-## 🛡️ Stage 2: Analyzing the Anti-Debugging Mechanism
-Before diving into the core logic, I noticed a mechanism writing a value to a `flag` variable. Analyzing the disassembly of the initialization function (`sub_8D0`), I uncovered a Linux kernel-level anti-debugging trick:
-* The application invokes `fork()` to create a child process.
-* The child process immediately executes `ptrace(PTRACE_ATTACH, parent_pid, 0, 0)` on its parent.
-* It then enters an infinite `waitpid` loop.
+### 🔓 [UnCrackable Level 2](./uncrackable-level2-reversing)
+Bypassing Linux kernel-level anti-debugging (`ptrace`) and extracting hidden secret keys from a native C/C++ JNI library (`libfoo.so`) using Frida inline hooking.
 
-Since Linux allows only one debugger to attach to a process at a time via `ptrace`, this effectively locks out external debuggers (like GDB or IDA debugger) from attaching to the parent process, preventing dynamic analysis.
-
-## ⚙️ Stage 3: Reversing the JNI Bridge Logic
-Looking at the core validation function `CodeCheck_bar`, I identified the execution flow:
-* The function first checks if `flag == 1` (likely a Root/Tamper detection check). If the flag is set, the Zero Flag is triggered after the `CMP` instruction, bypassing the conditional jump (`JNZ`) and forcing the execution into the validation logic.
-* **The JNI Bridge (הגישור):** The function utilizes JNIEnv offsets to pull the user's input from the Java layer (using `GetByteArrayElements` at offset `1472LL`) and compares it against a hardcoded secret string stored in the native memory (`"Thanks for all the fish"`).
-* The final comparison is performed using the standard C library function `strncmp`.
-
-## 💉 Stage 4: Dynamic Instrumentation (Frida Hooking)
-While I could patch the binary statically in IDA, bypassing the `ptrace` kernel lock dynamically is a much more elegant approach that avoids breaking the APK signature. I opted to use **Inline Hooking** via Frida (DBI).
-
-Instead of modifying the application's code, I wrote a Frida script to hook the `strncmp` function directly inside `libc.so`. The detour intercepts the execution pointer right when `strncmp` is called, allowing me to dump the arguments in memory.
-
-```javascript
-// Locate the "strncmp" function inside the standard C library
-var strncmpPtr = Module.findExportByName("libc.so", "strncmp");
-
-Interceptor.attach(strncmpPtr, {
-    onEnter: function(args) {
-        // Read the arguments being compared
-        var arg0 = Memory.readUtf8String(args[0]); // User Input
-        var arg1 = Memory.readUtf8String(args[1]); // The Secret Key
-
-        // Filter out background strncmp calls to find our target string
-        if (arg1.indexOf("Thanks for all the fish") !== -1) {
-            console.log("\n[!] Bridge Intercepted!");
-            console.log("[+] User Input: " + arg0);
-            console.log("[+] Secret Key: " + arg1);
-        }
-    }
-});
-```
-
-## 🚩 The Result
-Injecting the Frida script at runtime successfully bypassed the `ptrace` anti-debugging lock without requiring any modifications to the APK. As soon as the application attempted to validate the input, the JNI bridge was intercepted, and the hidden secret key was extracted from memory seamlessly.
-
-*Submitted on: 26/03/2026*
+---
+*Future targets waiting in the lab:*
+* *UnCrackable Level 1*
+* *UnCrackable Level 3*
+* *InsecureBankv2*
